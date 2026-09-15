@@ -1,0 +1,6 @@
+fastmcp
+uvicorn
+httpx
+PyJWT
+cryptography
+python-dotenv
