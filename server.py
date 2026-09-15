@@ -14,34 +14,56 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from fastmcp import FastMCP, Context
 from ema_auth import verify_ema_token
 
-# Khởi tạo FastMCP
-mcp = FastMCP("Enterprise MCP Server")
+# Khởi tạo FastMCP - Đại diện cho CRM MCP
+mcp = FastMCP("CRM MCP")
+
+# --- MOCK DATABASE TẠM THỜI ĐỂ LƯU QUYỀN CỦA USER ---
+# Trong thực tế, bạn sẽ query cái này từ PostgreSQL, MongoDB, Redis, v.v.
+MOCK_PERMISSION_DB = {
+    "user_1": {
+        "allowed_mcps": ["CRM MCP"],
+        "permissions": ["orders.read", "orders.update"]
+    },
+    "user_2": {
+        "allowed_mcps": ["CRM MCP"],
+        "permissions": ["orders.read", "users.read"]
+    }
+}
+
+def has_permission(ctx: Context, required_permission: str) -> bool:
+    """Hàm helper để kiểm tra xem user hiện tại có quyền cụ thể không."""
+    user = getattr(ctx.request.state, "user", {})
+    user_id = user.get("sub", "")
+    
+    # Tra cứu user_id trong Database
+    user_record = MOCK_PERMISSION_DB.get(user_id)
+    if not user_record:
+        return False
+        
+    return required_permission in user_record.get("permissions", [])
+
+# --- ĐỊNH NGHĨA CÁC TOOLS VỚI PHÂN QUYỀN CHI TIẾT ---
 
 @mcp.tool()
-def get_enterprise_data(query: str, ctx: Context) -> str:
-    """Lấy dữ liệu doanh nghiệp bí mật."""
-    # Lấy metadata từ JWT
-    user = getattr(ctx.request.state, "user", {})
-    metadata = user.get("metadata", {})
-    role = metadata.get("role", "")
-    
-    if role not in ["admin", "director"]:
-        return f"❌ Truy cập bị từ chối: Chỉ admin hoặc director mới được xem dữ liệu doanh nghiệp. Role hiện tại: {role or 'None'}"
-        
-    return f"Dữ liệu doanh nghiệp bí mật cho query: {query}"
+def read_orders(ctx: Context) -> str:
+    """Lấy danh sách các đơn hàng (Yêu cầu quyền: orders.read)."""
+    if not has_permission(ctx, "orders.read"):
+        return "❌ Lỗi: Bạn không có quyền truy cập dữ liệu (Missing 'orders.read')."
+    return "✅ [DATA] Danh sách đơn hàng: Order01 (100$), Order02 (500$)."
 
 @mcp.tool()
-def get_user_profile(user_id: str, ctx: Context) -> str:
-    """Lấy thông tin người dùng từ IdP."""
-    user = getattr(ctx.request.state, "user", {})
-    current_user_id = user.get("sub", "")
-    metadata = user.get("metadata", {})
-    role = metadata.get("role", "")
-    
-    if current_user_id != user_id and role != "hr":
-        return f"❌ Truy cập bị từ chối: Bạn chỉ có thể xem profile của chính mình hoặc cần role HR."
-        
-    return f"Profile của user {user_id}: Role={role}, Department=IT"
+def update_orders(order_id: str, status: str, ctx: Context) -> str:
+    """Cập nhật trạng thái đơn hàng (Yêu cầu quyền: orders.update)."""
+    if not has_permission(ctx, "orders.update"):
+        return "❌ Lỗi: Bạn không được phép sửa đơn hàng (Missing 'orders.update')."
+    return f"✅ [SUCCESS] Đã cập nhật đơn hàng {order_id} thành {status}."
+
+@mcp.tool()
+def read_users(ctx: Context) -> str:
+    """Xem danh sách khách hàng (Yêu cầu quyền: users.read)."""
+    if not has_permission(ctx, "users.read"):
+        return "❌ Lỗi: Bạn không có quyền truy cập dữ liệu người dùng (Missing 'users.read')."
+    return "✅ [DATA] Danh sách User: KH_A, KH_B, KH_C."
 
 # Khởi tạo FastAPI app
 app = FastAPI(title="Enterprise MCP Gateway")
@@ -64,6 +86,16 @@ class EMAAuthMiddleware(BaseHTTPMiddleware):
         if not decoded_token:
             return JSONResponse(
                 {"detail": "EMA Token verification failed"}, 
+                status_code=403
+            )
+            
+        user_id = decoded_token.get("sub")
+        
+        # Kiểm tra xem User có được phép kết nối vào MCP này không (Global Check)
+        user_record = MOCK_PERMISSION_DB.get(user_id)
+        if not user_record or "CRM MCP" not in user_record.get("allowed_mcps", []):
+            return JSONResponse(
+                {"detail": f"Access Denied: User {user_id} is not allowed to access CRM MCP"}, 
                 status_code=403
             )
             
