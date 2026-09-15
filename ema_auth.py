@@ -14,18 +14,21 @@ EMA_OIDC_ISSUER = os.getenv("EMA_OIDC_ISSUER", "")
 # Khởi tạo client để lấy public keys từ IdP
 jwks_client = PyJWKClient(EMA_JWKS_URL) if EMA_JWKS_URL else None
 
-def verify_ema_token(token: str) -> bool:
+from typing import Optional, Dict, Any
+
+def verify_ema_token(token: str) -> Optional[Dict[str, Any]]:
     """
     Hàm xác thực token JWT thực tế thông qua Identity Provider (IdP) sử dụng JWKS.
+    Trả về nội dung của Token (dict) nếu hợp lệ, ngược lại trả về None.
     """
     if not token:
         logger.warning("Không có token EMA được cung cấp.")
-        return False
+        return None
         
     if not jwks_client:
         logger.error("Chưa cấu hình EMA_JWKS_URL trong môi trường. Vui lòng thiết lập .env")
         # Rơi vào chế độ fallback hoặc từ chối toàn bộ
-        return False
+        return None
 
     try:
         # 1. Lấy public key từ JWKS URL tương ứng với 'kid' trong Header của JWT
@@ -49,7 +52,7 @@ def verify_ema_token(token: str) -> bool:
         # Tới bước này, token hợp lệ 100%
         user_id = decoded_token.get("sub")
         logger.info(f"Xác thực EMA thành công cho user: {user_id}")
-        return True
+        return decoded_token
         
     except jwt.ExpiredSignatureError:
         logger.warning("Token EMA đã hết hạn (Expired).")
@@ -58,4 +61,4 @@ def verify_ema_token(token: str) -> bool:
     except Exception as e:
         logger.error(f"Lỗi không xác định khi verify EMA token: {str(e)}")
         
-    return False
+    return None
