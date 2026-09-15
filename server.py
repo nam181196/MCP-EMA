@@ -9,10 +9,13 @@ from fastapi import FastAPI, Request
 # pyrefly: ignore [missing-import]
 from fastapi.responses import JSONResponse
 # pyrefly: ignore [missing-import]
+from pydantic import BaseModel
+# pyrefly: ignore [missing-import]
 from starlette.middleware.base import BaseHTTPMiddleware
 # pyrefly: ignore [missing-import]
 from fastmcp import FastMCP
-from ema_auth import verify_ema_token
+
+from ema_auth import verify_ema_token, generate_ema_token
 
 # Khởi tạo FastMCP
 mcp = FastMCP("Enterprise MCP Server")
@@ -28,12 +31,30 @@ def get_user_profile(user_id: str) -> str:
     return f"Profile của user {user_id}: Role=Admin, Department=IT"
 
 # Khởi tạo FastAPI app
-app = FastAPI(title="Enterprise MCP Gateway")
+app = FastAPI(title="Enterprise MCP Gateway (Local OAuth)")
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+@app.post("/token")
+def login_for_token(req: LoginRequest):
+    """
+    Endpoint OAuth cục bộ để demo.
+    Kiểm tra username/password (hardcode: admin/admin123) và sinh JWT.
+    """
+    if req.username == "admin" and req.password == "admin123":
+        # Sinh token bằng hàm từ ema_auth
+        token = generate_ema_token(req.username)
+        return {"access_token": token, "token_type": "bearer"}
+    return JSONResponse(status_code=401, content={"detail": "Tài khoản hoặc mật khẩu không đúng"})
 
 class EMAAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        # Bỏ qua xác thực cho các public endpoint nếu có, ví dụ /docs
-        if request.url.path.startswith("/docs") or request.url.path.startswith("/openapi"):
+        # Bỏ qua xác thực cho các public endpoint nếu có, ví dụ /docs, /token
+        if (request.url.path.startswith("/docs") or 
+            request.url.path.startswith("/openapi") or 
+            request.url.path.startswith("/token")):
             return await call_next(request)
             
         auth_header = request.headers.get("Authorization")

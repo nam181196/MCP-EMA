@@ -1,54 +1,47 @@
 import os
 import logging
+# pyrefly: ignore [missing-import]
 import jwt
-from jwt import PyJWKClient
+import datetime
 
 logger = logging.getLogger(__name__)
 
 # Đọc cấu hình từ biến môi trường (hoặc file .env)
-# Ví dụ về JWKS URL của Keycloak: https://<domain>/auth/realms/<realm>/protocol/openid-connect/certs
-EMA_JWKS_URL = os.getenv("EMA_JWKS_URL", "")
-EMA_OIDC_AUDIENCE = os.getenv("EMA_OIDC_AUDIENCE", "")
-EMA_OIDC_ISSUER = os.getenv("EMA_OIDC_ISSUER", "")
+# Sử dụng một SECRET_KEY tĩnh để ký (sign) JWT
+EMA_SECRET_KEY = os.getenv("EMA_SECRET_KEY", "super-secret-key-for-local-oauth-12345")
 
-# Khởi tạo client để lấy public keys từ IdP
-jwks_client = PyJWKClient(EMA_JWKS_URL) if EMA_JWKS_URL else None
+def generate_ema_token(user_id: str) -> str:
+    """
+    Hàm sinh token JWT nội bộ (OAuth cục bộ).
+    """
+    payload = {
+        "sub": user_id,
+        "iat": datetime.datetime.now(datetime.timezone.utc),
+        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2) # Hết hạn sau 2 giờ
+    }
+    token = jwt.encode(payload, EMA_SECRET_KEY, algorithm="HS256")
+    return token
 
 def verify_ema_token(token: str) -> bool:
     """
-    Hàm xác thực token JWT thực tế thông qua Identity Provider (IdP) sử dụng JWKS.
+    Hàm xác thực token JWT nội bộ bằng SECRET_KEY.
     """
     if not token:
         logger.warning("Không có token EMA được cung cấp.")
         return False
         
-    if not jwks_client:
-        logger.error("Chưa cấu hình EMA_JWKS_URL trong môi trường. Vui lòng thiết lập .env")
-        # Rơi vào chế độ fallback hoặc từ chối toàn bộ
-        return False
-
     try:
-        # 1. Lấy public key từ JWKS URL tương ứng với 'kid' trong Header của JWT
-        signing_key = jwks_client.get_signing_key_from_jwt(token)
-        
-        # 2. Xác thực và giải mã Token
-        # Bắt buộc phải khớp thuật toán (ví dụ: RS256), audience và issuer
+        # Giải mã và xác minh chữ ký JWT
         decoded_token = jwt.decode(
             token,
-            signing_key.key,
-            algorithms=["RS256"],
-            audience=EMA_OIDC_AUDIENCE if EMA_OIDC_AUDIENCE else None,
-            issuer=EMA_OIDC_ISSUER if EMA_OIDC_ISSUER else None,
-            options={
-                "verify_aud": bool(EMA_OIDC_AUDIENCE),
-                "verify_iss": bool(EMA_OIDC_ISSUER),
-                "verify_exp": True, # Luôn kiểm tra hạn sử dụng
-            }
+            EMA_SECRET_KEY,
+            algorithms=["HS256"],
+            options={"verify_exp": True} # Luôn kiểm tra hạn sử dụng
         )
         
-        # Tới bước này, token hợp lệ 100%
+        # Tới bước này, token hợp lệ
         user_id = decoded_token.get("sub")
-        logger.info(f"Xác thực EMA thành công cho user: {user_id}")
+        logger.info(f"Xác thực nội bộ thành công cho user: {user_id}")
         return True
         
     except jwt.ExpiredSignatureError:
