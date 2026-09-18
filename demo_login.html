@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo Lấy Token Clerk</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 50px; background: #f3f4f6; color: #111827; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        h1 { font-size: 24px; margin-bottom: 20px; }
+        #app { margin-bottom: 20px; }
+        .token-box { display: none; margin-top: 20px; }
+        .token-header { font-weight: bold; margin-bottom: 10px; color: #059669; }
+        textarea { width: 100%; height: 150px; padding: 10px; font-family: monospace; border: 1px solid #d1d5db; border-radius: 5px; resize: vertical; }
+        .hint { font-size: 14px; color: #6b7280; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>👋 Trình Tạo Token Demo (Clerk)</h1>
+        
+        <!-- Nơi Clerk render component Đăng nhập/User Button -->
+        <div id="app"></div>
+
+        <!-- Vùng hiển thị Token sau khi đăng nhập thành công -->
+        <div id="token-box" class="token-box">
+            <div class="token-header">🎉 Xác thực thành công! Đây là chuỗi Token (JWT) của bạn:</div>
+            <textarea id="jwt-token" readonly></textarea>
+            <div class="hint">Hãy copy toàn bộ chuỗi trên và dán vào phần "Authorization: Bearer <...>" của Claude.</div>
+        </div>
+    </div>
+
+    <!-- Nhúng thư viện Clerk JS -->
+    <script>
+        // ⚠️ QUAN TRỌNG: Bạn BẮT BUỘC phải điền Publishable Key của Clerk vào biến dưới đây!
+        // Ví dụ: const clerkPubKey = "pk_test_bWFnaWNhbC1ib2Fhci0xMi5jbGVyay5hY2NvdW50cy5kZXYk";
+        const clerkPubKey = "ĐIỀN_PUBLISHABLE_KEY_CỦA_BẠN_VÀO_ĐÂY";
+
+        if (clerkPubKey === "ĐIỀN_PUBLISHABLE_KEY_CỦA_BẠN_VÀO_ĐÂY") {
+            document.getElementById('app').innerHTML = "<p style='color:red; font-weight:bold;'>Lỗi: Bạn chưa điền Publishable Key vào mã nguồn file HTML này!</p>";
+        } else {
+            const script = document.createElement("script");
+            script.setAttribute("data-clerk-publishable-key", clerkPubKey);
+            script.async = true;
+            script.src = `https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js`;
+            
+            script.onload = async () => {
+                try {
+                    await window.Clerk.load();
+                    
+                    const appDiv = document.getElementById("app");
+                    const tokenBox = document.getElementById("token-box");
+                    const jwtTextarea = document.getElementById("jwt-token");
+
+                    if (window.Clerk.user) {
+                        // Nếu đã đăng nhập, hiển thị User Button
+                        window.Clerk.mountUserButton(appDiv);
+                        
+                        // Lấy token và in ra màn hình
+                        const token = await window.Clerk.session.getToken();
+                        jwtTextarea.value = token;
+                        tokenBox.style.display = "block";
+                    } else {
+                        // Nếu chưa đăng nhập, hiển thị khung SignIn
+                        window.Clerk.mountSignIn(appDiv);
+                    }
+                } catch (err) {
+                    console.error("Lỗi khởi tạo Clerk:", err);
+                }
+            };
+            
+            document.body.appendChild(script);
+        }
+    </script>
+</body>
+</html>
