@@ -120,8 +120,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/auth")
-def auth_callback(session_id: str, token: str):
+from pydantic import BaseModel
+
+class AuthRequest(BaseModel):
+    session_id: str
+    token: str
+
+@app.post("/auth")
+def auth_callback(req: AuthRequest):
+    session_id = req.session_id
+    token = req.token
     """API để Frontend gửi Token về cho Server sau khi đăng nhập thành công"""
     if not session_id or not token:
         return JSONResponse({"error": "Thiếu session_id hoặc token"}, status_code=400)
