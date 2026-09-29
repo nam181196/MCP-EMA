@@ -108,7 +108,7 @@ def get_all_users(session_id: str) -> str:
 
 
 # Khởi tạo FastAPI app
-mcp_app = mcp.sse_app(sse_path="/sse", message_path="/messages", host="*")
+mcp_app = mcp.sse_app(sse_path="/sse", message_path="/messages/", host="*")
 app = FastAPI(title="Enterprise MCP Gateway")
 
 # Cấu hình CORS để Frontend (port 3000) có thể fetch API
@@ -176,13 +176,18 @@ def auth_callback(req: AuthRequest):
 
 
 
-# Mount ASGI app của FastMCP vào root (đã được bọc bởi middleware viết lại path)
+class AddTrailingSlashMiddleware:
+    def __init__(self, app):
+        self.app = app
+        
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http":
+            path = scope.get("path", "")
+            if path == "/mcp/messages":
+                scope["path"] = "/mcp/messages/"
+        return await self.app(scope, receive, send)
 
-
-
-
-
-
+app.add_middleware(AddTrailingSlashMiddleware)
 app.mount("/mcp", mcp_app)
 
 
