@@ -108,7 +108,7 @@ def get_all_users(session_id: str) -> str:
 
 
 # Khởi tạo FastAPI app
-mcp_app = mcp.sse_app(sse_path="/mcp/sse", message_path="/mcp/messages/", host="*")
+mcp_app = mcp.sse_app(sse_path="/mcp/sse", message_path="/mcp/messages", host="*")
 app = FastAPI(title="Enterprise MCP Gateway")
 
 # Cấu hình CORS để Frontend (port 3000) có thể fetch API
@@ -174,18 +174,7 @@ def auth_callback(req: AuthRequest):
     print(f"✅ User {user_id} (Role: {role}) đã đăng nhập thành công cho phiên {session_id}")
     return JSONResponse({"message": "Xác thực thành công. Vui lòng đóng cửa sổ này."})
 
-class MCPPathRewriteMiddleware:
-    def __init__(self, app):
-        self.app = app
-        
-    async def __call__(self, scope, receive, send):
-        if scope["type"] == "http":
-            path = scope.get("path", "")
-            if path == "/mcp":
-                scope["path"] = "/sse"
-            elif path == "/mcp/messages":
-                scope["path"] = "/messages"
-        return await self.app(scope, receive, send)
+
 
 # Mount ASGI app của FastMCP vào root (đã được bọc bởi middleware viết lại path)
 
