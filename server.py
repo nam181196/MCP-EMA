@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 # pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
 # pyrefly: ignore [missing-import]
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 # pyrefly: ignore [missing-import]
 from starlette.middleware.base import BaseHTTPMiddleware
 # pyrefly: ignore [missing-import]
@@ -64,7 +64,7 @@ def login() -> str:
     session_id = str(uuid.uuid4())
     SESSIONS[session_id] = None
     
-    login_url = f"http://localhost:3000/demo_login.html?session_id={session_id}"
+    login_url = f"https://mcp-ema.onrender.com/login?session_id={session_id}"
     return f"Vui lòng cung cấp link này cho người dùng để họ đăng nhập: {login_url}\n\nQuan trọng: Bắt buộc nhắc người dùng quay lại đây báo cáo sau khi đăng nhập xong. Sau đó, hãy dùng {session_id} truyền vào tham số 'session_id' của tất cả các công cụ khác."
 
 @mcp.tool()
@@ -125,6 +125,10 @@ from pydantic import BaseModel
 class AuthRequest(BaseModel):
     session_id: str
     token: str
+
+@app.get("/login")
+def serve_login_page():
+    return FileResponse("demo_login.html")
 
 @app.post("/auth")
 def auth_callback(req: AuthRequest):
