@@ -143,6 +143,12 @@ def auth_callback(session_id: str, token: str):
     if not role_record or "CRM MCP" not in role_record.get("allowed_mcps", []):
         return JSONResponse({"error": f"Tài khoản {user_id} (Role: {role}) bị cấm truy cập hệ thống MCP."}, status_code=403)
         
+    # Xóa các phiên cũ của cùng một user_id (Đảm bảo 1 tài khoản = 1 thiết bị)
+    old_sessions = [sid for sid, data in SESSIONS.items() if data.get("user_id") == user_id]
+    for sid in old_sessions:
+        del SESSIONS[sid]
+        print(f"⚠️ Đã đăng xuất phiên {sid} do tài khoản {user_id} đăng nhập ở nơi khác.")
+        
     # Lưu user_id và role vào phiên làm việc
     SESSIONS[session_id] = {"user_id": user_id, "role": role}
     print(f"✅ User {user_id} (Role: {role}) đã đăng nhập thành công cho phiên {session_id}")
