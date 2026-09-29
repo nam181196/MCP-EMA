@@ -167,13 +167,6 @@ class MCPPathRewriteMiddleware:
 
 
 
-@app.post("/mcp/sse")
-@app.post("/mcp")
-async def handle_post(request: Request):
-    body = await request.body()
-    with open("claude_post_body.txt", "a") as out:
-        out.write(f"POST {request.url.path} HEADERS: {request.headers} BODY: {body.decode('utf-8')}\n")
-    return JSONResponse({"status": "intercepted"})
 
 app.mount("/mcp", mcp_app)
 
