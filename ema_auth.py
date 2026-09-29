@@ -1,6 +1,8 @@
 import os
 import logging
+# pyrefly: ignore [missing-import]
 import jwt
+# pyrefly: ignore [missing-import]
 from jwt import PyJWKClient
 
 logger = logging.getLogger(__name__)

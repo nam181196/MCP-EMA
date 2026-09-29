@@ -1,5 +1,6 @@
 # pyrefly: ignore [missing-import]
 import uvicorn
+import uuid
 # pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 load_dotenv()  # Nạp biến môi trường từ .env
@@ -7,113 +8,147 @@ load_dotenv()  # Nạp biến môi trường từ .env
 # pyrefly: ignore [missing-import]
 from fastapi import FastAPI, Request
 # pyrefly: ignore [missing-import]
+from fastapi.middleware.cors import CORSMiddleware
+# pyrefly: ignore [missing-import]
 from fastapi.responses import JSONResponse
 # pyrefly: ignore [missing-import]
 from starlette.middleware.base import BaseHTTPMiddleware
 # pyrefly: ignore [missing-import]
-from fastmcp import FastMCP, Context
+from mcp.server.mcpserver import MCPServer
+
 from ema_auth import verify_ema_token
 
 # Khởi tạo FastMCP - Đại diện cho CRM MCP
-mcp = FastMCP("CRM MCP")
+mcp = MCPServer("CRM MCP")
 
-# --- MOCK DATABASE TẠM THỜI ĐỂ LƯU QUYỀN CỦA USER ---
-# Trong thực tế, bạn sẽ query cái này từ PostgreSQL, MongoDB, Redis, v.v.
-MOCK_PERMISSION_DB = {
-    "user_1": {
+# Bảng Phân quyền Động dựa trên Role (Role-based Access Control Matrix)
+# Thay vì lưu user_id, ta định nghĩa quyền hạn cho các Role chung.
+ROLE_PERMISSIONS = {
+    "customer": {
         "allowed_mcps": ["CRM MCP"],
-        "permissions": ["orders.read", "orders.update"]
+        "permissions": ["products.read", "orders.read_own", "orders.create"]
     },
-    "user_2": {
+    "staff": {
         "allowed_mcps": ["CRM MCP"],
-        "permissions": ["orders.read", "users.read"]
+        "permissions": ["products.read", "orders.read_all", "orders.update"]
+    },
+    "admin": {
+        "allowed_mcps": ["CRM MCP"],
+        "permissions": ["products.read", "products.write", "orders.read_all", "orders.update", "users.read_all", "stats.read"]
     }
 }
 
-def has_permission(ctx: Context, required_permission: str) -> bool:
-    """Hàm helper để kiểm tra xem user hiện tại có quyền cụ thể không."""
-    user = getattr(ctx.request.state, "user", {})
-    user_id = user.get("sub", "")
-    
-    # Tra cứu user_id trong Database
-    user_record = MOCK_PERMISSION_DB.get(user_id)
-    if not user_record:
+# --- GLOBAL SESSION STORE ---
+# Lưu trữ ánh xạ: session_id -> {"user_id": "...", "role": "..."}
+SESSIONS = {}
+
+def has_permission(session_id: str, required_permission: str) -> bool:
+    """Hàm helper để kiểm tra xem user hiện tại có quyền cụ thể không dựa vào Role trên Clerk."""
+    session_data = SESSIONS.get(session_id)
+    if not session_data:
         return False
         
-    return required_permission in user_record.get("permissions", [])
+    # Tra cứu Role trong Bảng Phân quyền
+    role = session_data.get("role")
+    role_record = ROLE_PERMISSIONS.get(role)
+    if not role_record:
+        return False
+        
+    return required_permission in role_record.get("permissions", [])
 
 # --- ĐỊNH NGHĨA CÁC TOOLS VỚI PHÂN QUYỀN CHI TIẾT ---
 
 @mcp.tool()
-def read_orders(ctx: Context) -> str:
-    """Lấy danh sách các đơn hàng (Yêu cầu quyền: orders.read)."""
-    if not has_permission(ctx, "orders.read"):
-        return "❌ Lỗi: Bạn không có quyền truy cập dữ liệu (Missing 'orders.read')."
-    return "✅ [DATA] Danh sách đơn hàng: Order01 (100$), Order02 (500$)."
+def login() -> str:
+    """Sử dụng công cụ này khi người dùng muốn đăng nhập. Nó sẽ trả về một link đăng nhập và một session_id."""
+    session_id = str(uuid.uuid4())
+    SESSIONS[session_id] = None
+    
+    login_url = f"http://localhost:3000/demo_login.html?session_id={session_id}"
+    return f"Vui lòng cung cấp link này cho người dùng để họ đăng nhập: {login_url}\n\nQuan trọng: Bắt buộc nhắc người dùng quay lại đây báo cáo sau khi đăng nhập xong. Sau đó, hãy dùng {session_id} truyền vào tham số 'session_id' của tất cả các công cụ khác."
 
 @mcp.tool()
-def update_orders(order_id: str, status: str, ctx: Context) -> str:
-    """Cập nhật trạng thái đơn hàng (Yêu cầu quyền: orders.update)."""
-    if not has_permission(ctx, "orders.update"):
-        return "❌ Lỗi: Bạn không được phép sửa đơn hàng (Missing 'orders.update')."
-    return f"✅ [SUCCESS] Đã cập nhật đơn hàng {order_id} thành {status}."
+def get_products(session_id: str) -> str:
+    """Lấy danh sách sản phẩm hiển thị trên Cửa hàng (Yêu cầu quyền: products.read)."""
+    if not has_permission(session_id, "products.read"):
+        return "❌ Lỗi: Bạn chưa đăng nhập hoặc không có quyền xem sản phẩm."
+    return "✅ [DATA] Bảng `products`: \n1. Giày Nike Air Max (Giá: $120)\n2. Áo thun Adidas (Giá: $30)\n3. Quần thể thao Puma (Giá: $45)"
 
 @mcp.tool()
-def read_users(ctx: Context) -> str:
-    """Xem danh sách khách hàng (Yêu cầu quyền: users.read)."""
-    if not has_permission(ctx, "users.read"):
-        return "❌ Lỗi: Bạn không có quyền truy cập dữ liệu người dùng (Missing 'users.read')."
-    return "✅ [DATA] Danh sách User: KH_A, KH_B, KH_C."
+def get_all_orders(session_id: str) -> str:
+    """[Dành cho Admin/Staff] Lấy toàn bộ danh sách đơn hàng của hệ thống (Yêu cầu quyền: orders.read_all)."""
+    if not has_permission(session_id, "orders.read_all"):
+        return "❌ Lỗi: Từ chối truy cập. Chỉ Nhân viên hoặc Admin mới được xem toàn bộ đơn hàng của hệ thống."
+    return "✅ [DATA] Bảng `orders` (Tất cả): \n- Đơn #001: Giày Nike -> Đang giao\n- Đơn #002: Áo thun Adidas -> Đã giao"
+
+@mcp.tool()
+def get_my_orders(session_id: str) -> str:
+    """[Dành cho Customer] Lấy danh sách đơn hàng của chính bạn (Yêu cầu quyền: orders.read_own)."""
+    if not has_permission(session_id, "orders.read_own"):
+        return "❌ Lỗi: Từ chối truy cập (Missing 'orders.read_own')."
+    
+    # Lấy User ID hiện tại từ Session
+    session_data = SESSIONS.get(session_id)
+    current_user_id = session_data.get("user_id") if session_data else "Unknown"
+    return f"✅ [DATA] Đơn hàng của {current_user_id}: \n- Đơn #999: Quần thể thao Puma -> Chờ xử lý"
+
+@mcp.tool()
+def update_order_status(session_id: str, order_id: str, status: str) -> str:
+    """[Dành cho Admin/Staff] Cập nhật trạng thái đơn hàng (Yêu cầu quyền: orders.update)."""
+    if not has_permission(session_id, "orders.update"):
+        return "❌ Lỗi: Khách hàng không được phép sửa trạng thái đơn hàng (Missing 'orders.update')."
+    return f"✅ [SUCCESS] Bảng `orders`: Đã cập nhật đơn hàng {order_id} thành trạng thái '{status}'."
+
+@mcp.tool()
+def get_all_users(session_id: str) -> str:
+    """[Dành cho Admin] Xem danh sách tất cả tài khoản hệ thống (Yêu cầu quyền: users.read_all)."""
+    if not has_permission(session_id, "users.read_all"):
+        return "❌ Lỗi: Từ chối truy cập! Chỉ Admin mới được quyền xem danh sách khách hàng."
+    return "✅ [DATA] Bảng `users`: \n- user_2jF3sP... (Customer)\n- user_staff_xyz (Staff)\n- user_admin_abc (Admin)"
+
 
 # Khởi tạo FastAPI app
+mcp_app = mcp.sse_app(sse_path="/sse", message_path="/messages/", host="*")
 app = FastAPI(title="Enterprise MCP Gateway")
 
-class EMAAuthMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        # Bỏ qua xác thực cho các public endpoint nếu có, ví dụ /docs
-        if request.url.path.startswith("/docs") or request.url.path.startswith("/openapi"):
-            return await call_next(request)
-            
-        auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            return JSONResponse(
-                {"detail": "Missing or invalid Authorization header. Expected 'Bearer ema_...'"}, 
-                status_code=401
-            )
-        
-        token = auth_header[7:]
-        decoded_token = verify_ema_token(token)
-        if not decoded_token:
-            return JSONResponse(
-                {"detail": "EMA Token verification failed"}, 
-                status_code=403
-            )
-            
-        user_id = decoded_token.get("sub")
-        
-        # Kiểm tra xem User có được phép kết nối vào MCP này không (Global Check)
-        user_record = MOCK_PERMISSION_DB.get(user_id)
-        if not user_record or "CRM MCP" not in user_record.get("allowed_mcps", []):
-            return JSONResponse(
-                {"detail": f"Access Denied: User {user_id} is not allowed to access CRM MCP"}, 
-                status_code=403
-            )
-            
-        # Tiêm thông tin user vào request state
-        request.state.user = decoded_token
-            
-        return await call_next(request)
+# Cấu hình CORS để Frontend (port 3000) có thể fetch API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Áp dụng middleware kiểm tra EMA token cho toàn bộ app
-app.add_middleware(EMAAuthMiddleware)
+@app.get("/auth")
+def auth_callback(session_id: str, token: str):
+    """API để Frontend gửi Token về cho Server sau khi đăng nhập thành công"""
+    if not session_id or not token:
+        return JSONResponse({"error": "Thiếu session_id hoặc token"}, status_code=400)
+        
+    decoded_token = verify_ema_token(token)
+    if not decoded_token:
+        return JSONResponse({"error": "Xác thực Token thất bại"}, status_code=403)
+        
+    user_id = decoded_token.get("sub")
+    
+    # Clerk thường lưu metadata trong trường 'public_metadata'. 
+    # Ta cũng hỗ trợ đọc trực tiếp từ trường 'role' (Custom Claim) nếu có.
+    # Mặc định (Default Fallback) là role 'customer' nếu người dùng chưa được gán.
+    public_metadata = decoded_token.get("public_metadata", {})
+    role = public_metadata.get("role") or decoded_token.get("role") or "customer"
+    
+    # Kiểm tra xem Role này có được phép vào MCP không
+    role_record = ROLE_PERMISSIONS.get(role)
+    if not role_record or "CRM MCP" not in role_record.get("allowed_mcps", []):
+        return JSONResponse({"error": f"Tài khoản {user_id} (Role: {role}) bị cấm truy cập hệ thống MCP."}, status_code=403)
+        
+    # Lưu user_id và role vào phiên làm việc
+    SESSIONS[session_id] = {"user_id": user_id, "role": role}
+    print(f"✅ User {user_id} (Role: {role}) đã đăng nhập thành công cho phiên {session_id}")
+    return JSONResponse({"message": "Xác thực thành công. Vui lòng đóng cửa sổ này."})
 
 class MCPPathRewriteMiddleware:
-    """
-    Middleware ASGI dùng để bóc tách và viết lại đường dẫn sao cho:
-    - /mcp -> /sse
-    - /mcp/messages -> /messages
-    Để đảm bảo tương thích 100% với các client chỉ cho phép endpoint kết thúc bằng /mcp (ví dụ Claude Web).
-    """
     def __init__(self, app):
         self.app = app
         
@@ -127,7 +162,23 @@ class MCPPathRewriteMiddleware:
         return await self.app(scope, receive, send)
 
 # Mount ASGI app của FastMCP vào root (đã được bọc bởi middleware viết lại path)
-app.mount("/", MCPPathRewriteMiddleware(mcp.http_app))
+
+
+
+
+
+@app.post("/mcp/sse")
+@app.post("/mcp")
+async def handle_post(request: Request):
+    body = await request.body()
+    with open("claude_post_body.txt", "a") as out:
+        out.write(f"POST {request.url.path} HEADERS: {request.headers} BODY: {body.decode('utf-8')}\n")
+    return JSONResponse({"status": "intercepted"})
+
+app.mount("/mcp", mcp_app)
+
+
+
 
 if __name__ == "__main__":
     print("Khởi động MCP Server (FastAPI + FastMCP) tại http://localhost:8000 ...")

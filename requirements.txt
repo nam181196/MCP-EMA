@@ -1,4 +1,5 @@
-fastmcp
+fastapi
+mcp
 uvicorn
 httpx
 PyJWT
