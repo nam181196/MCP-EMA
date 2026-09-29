@@ -164,7 +164,7 @@ def auth_callback(req: AuthRequest):
         return JSONResponse({"error": f"Tài khoản {user_id} (Role: {role}) bị cấm truy cập hệ thống MCP."}, status_code=403)
         
     # Xóa các phiên cũ của cùng một user_id (Đảm bảo 1 tài khoản = 1 thiết bị)
-    old_sessions = [sid for sid, data in SESSIONS.items() if data.get("user_id") == user_id]
+    old_sessions = [sid for sid, data in SESSIONS.items() if data and data.get("user_id") == user_id]
     for sid in old_sessions:
         del SESSIONS[sid]
         print(f"⚠️ Đã đăng xuất phiên {sid} do tài khoản {user_id} đăng nhập ở nơi khác.")
