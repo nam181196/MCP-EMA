@@ -126,9 +126,17 @@ def auth_callback(session_id: str, token: str):
     if not session_id or not token:
         return JSONResponse({"error": "Thiếu session_id hoặc token"}, status_code=400)
         
-    decoded_token = verify_ema_token(token)
+    try:
+        decoded_token = verify_ema_token(token)
+    except Exception as e:
+        return JSONResponse({"error": f"Lỗi Exception: {str(e)}"}, status_code=403)
+        
     if not decoded_token:
-        return JSONResponse({"error": "Xác thực Token thất bại"}, status_code=403)
+        # Check if jwks_client is initialized
+        from ema_auth import jwks_client, EMA_JWKS_URL
+        if not jwks_client:
+            return JSONResponse({"error": f"Lỗi: jwks_client is None. EMA_JWKS_URL='{EMA_JWKS_URL}'"}, status_code=403)
+        return JSONResponse({"error": "Xác thực Token thất bại (decoded_token là None)"}, status_code=403)
         
     user_id = decoded_token.get("sub")
     
