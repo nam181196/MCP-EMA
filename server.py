@@ -108,7 +108,7 @@ def get_all_users(session_id: str) -> str:
 
 
 # Khởi tạo FastAPI app
-mcp_app = mcp.sse_app(sse_path="/mcp", message_path="/mcp/messages", host="*")
+mcp_app = mcp.sse_app(sse_path="/sse", message_path="/messages/", host="*")
 app = FastAPI(title="Enterprise MCP Gateway")
 
 # Cấu hình CORS để Frontend (port 3000) có thể fetch API
@@ -168,7 +168,7 @@ class MCPPathRewriteMiddleware:
 
 
 
-app.mount("/", mcp_app)
+app.mount("/mcp", mcp_app)
 
 
 
