@@ -120,6 +120,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel
 
 class AuthRequest(BaseModel):
@@ -189,8 +190,6 @@ class AddTrailingSlashMiddleware:
 
 app.add_middleware(AddTrailingSlashMiddleware)
 app.mount("/mcp", mcp_app)
-
-
 
 
 if __name__ == "__main__":

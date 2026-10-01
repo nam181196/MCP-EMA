@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-server
+  labels:
+    app: mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-server
+  template:
+    metadata:
+      labels:
+        app: mcp-server
+    spec:
+      containers:
+      - name: mcp-server
+        image: your-dockerhub-username/mcp-server:latest # THAY ĐỔI IMAGE NÀY SAU KHI PUSH
+        ports:
+        - containerPort: 8000
+        env:
+        # Khai báo các biến môi trường tại đây
+        - name: EMA_JWKS_URL
+          value: "https://logical-guppy-2189.clerk.accounts.dev/.well-known/jwks.json"
+        # - name: MONGODB_URI
+        #   value: "mongodb+srv://..."

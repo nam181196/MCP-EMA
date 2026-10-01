@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/Users/nam/Desktop/MCP-EMA/server.py", line 2, in <module>
+    import uvicorn
+ModuleNotFoundError: No module named 'uvicorn'
