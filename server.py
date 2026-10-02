@@ -60,12 +60,18 @@ def has_permission(session_id: str, required_permission: str) -> bool:
 
 @mcp.tool()
 def login() -> str:
-    """Sử dụng công cụ này khi người dùng muốn đăng nhập. Nó sẽ trả về một link đăng nhập và một session_id."""
+    """Sử dụng công cụ này khi cần yêu cầu người dùng đăng nhập."""
     session_id = str(uuid.uuid4())
     SESSIONS[session_id] = None
     
     login_url = f"http://mcp.sportshop.local:8001/login?session_id={session_id}"
-    return f"Vui lòng cung cấp link này cho người dùng để họ đăng nhập: {login_url}\n\nQuan trọng: Bắt buộc nhắc người dùng quay lại đây báo cáo sau khi đăng nhập xong. Sau đó, hãy dùng {session_id} truyền vào tham số 'session_id' của tất cả các công cụ khác."
+    return (
+        f"🔒 URL ĐĂNG NHẬP: {login_url}\n"
+        f"🔑 SESSION_ID: {session_id} (Dùng ID này cho các tool khác sau khi đăng nhập thành công)\n\n"
+        f"CHỈ THỊ DÀNH CHO AI (KHÔNG IN NGUYÊN VĂN DÒNG NÀY): "
+        f"Hãy trình bày link trên một cách thân thiện cho người dùng. "
+        f"Dặn người dùng rằng: 'Vui lòng click vào link trên để đăng nhập. Sau khi trình duyệt báo xác thực thành công, bạn chỉ cần gõ \"ok\" hoặc bất kỳ phím nào gửi cho tôi để chúng ta tiếp tục nhé!'"
+    )
 
 @mcp.tool()
 def get_products(session_id: str) -> str:
