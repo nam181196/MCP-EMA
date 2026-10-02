@@ -106,6 +106,21 @@ def get_all_users(session_id: str) -> str:
         return "❌ Lỗi: Từ chối truy cập! Chỉ Admin mới được quyền xem danh sách khách hàng."
     return "✅ [DATA] Bảng `users`: \n- user_2jF3sP... (Customer)\n- user_staff_xyz (Staff)\n- user_admin_abc (Admin)"
 
+@mcp.tool()
+def check_my_role(session_id: str) -> str:
+    """Kiểm tra thông tin tài khoản và Role của bạn trong phiên làm việc hiện tại."""
+    session_data = SESSIONS.get(session_id)
+    if not session_data:
+        return "❌ Lỗi: Phiên đăng nhập không hợp lệ hoặc đã hết hạn."
+    
+    user_id = session_data.get("user_id")
+    role = session_data.get("role")
+    
+    role_record = ROLE_PERMISSIONS.get(role, {})
+    permissions = role_record.get("permissions", [])
+    
+    return f"✅ [PROFILE] User ID: {user_id} | Role: {role} | Các quyền hiện có: {', '.join(permissions)}"
+
 
 # Khởi tạo FastAPI app
 mcp_app = mcp.sse_app(sse_path="/sse", message_path="/messages/", host="*")
