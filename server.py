@@ -112,7 +112,7 @@ mcp_app = mcp.sse_app(sse_path="/sse", message_path="/messages/", host="*")
 app = FastAPI(title="Enterprise MCP Gateway")
 
 # --- BẢO MẬT: CHẶN IP LẠ (Chỉ cho phép Local và IP mạng công ty) ---
-ALLOWED_IPS = ["127.0.0.1", "10.5.94."] # Bạn có thể thêm các dải IP khác của cty vào đây
+ALLOWED_IPS = ["127.0.0.1", "10.5.94.", "192.168."] # Bạn có thể thêm các dải IP khác của cty vào đây
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
