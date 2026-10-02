@@ -64,7 +64,7 @@ def login() -> str:
     session_id = str(uuid.uuid4())
     SESSIONS[session_id] = None
     
-    login_url = f"https://mcp-ema.onrender.com/login?session_id={session_id}"
+    login_url = f"http://mcp.sportshop.local:8001/login?session_id={session_id}"
     return f"Vui lòng cung cấp link này cho người dùng để họ đăng nhập: {login_url}\n\nQuan trọng: Bắt buộc nhắc người dùng quay lại đây báo cáo sau khi đăng nhập xong. Sau đó, hãy dùng {session_id} truyền vào tham số 'session_id' của tất cả các công cụ khác."
 
 @mcp.tool()
@@ -110,6 +110,24 @@ def get_all_users(session_id: str) -> str:
 # Khởi tạo FastAPI app
 mcp_app = mcp.sse_app(sse_path="/sse", message_path="/messages/", host="*")
 app = FastAPI(title="Enterprise MCP Gateway")
+
+# --- BẢO MẬT: CHẶN IP LẠ (Chỉ cho phép Local và IP mạng công ty) ---
+ALLOWED_IPS = ["127.0.0.1", "10.5.94."] # Bạn có thể thêm các dải IP khác của cty vào đây
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+@app.middleware("http")
+async def ip_blocker_middleware(request: Request, call_next):
+    client_ip = request.client.host
+    # Kiểm tra xem IP kết nối đến có bắt đầu bằng các IP hợp lệ không
+    is_allowed = any(client_ip.startswith(ip) for ip in ALLOWED_IPS)
+    
+    if not is_allowed:
+        print(f"⚠️ [SECURITY] Đã chặn IP lạ truy cập: {client_ip}")
+        return JSONResponse(status_code=403, content={"error": f"Access Denied: IP {client_ip} not allowed"})
+        
+    return await call_next(request)
 
 # Cấu hình CORS để Frontend (port 3000) có thể fetch API
 app.add_middleware(
